@@ -1,0 +1,14 @@
+{
+  "name": "@opendestiny/astro-wnl",
+  "version": "0.1.0",
+  "description": "Astronomical and traditional Chinese calendar computation core",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "astronomy-engine": "^2.1.19"
+  }
+}
