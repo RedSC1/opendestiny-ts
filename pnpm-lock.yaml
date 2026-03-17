@@ -12,16 +12,9 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
-  packages/astro-wnl:
-    dependencies:
-      astronomy-engine:
-        specifier: ^2.1.19
-        version: 2.1.19
+  packages/astro-wnl: {}
 
 packages:
-
-  astronomy-engine@2.1.19:
-    resolution: {integrity: sha512-8yWKNf7UeNbH458h3sAJ6ZgAjE5jTXp/mNNRFoC20j2SHwZIjAQeEsBB2Q3uCFRaTCCJRv33K2XhkhZQMXoX6w==}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -29,7 +22,5 @@ packages:
     hasBin: true
 
 snapshots:
-
-  astronomy-engine@2.1.19: {}
 
   typescript@5.9.3: {}
