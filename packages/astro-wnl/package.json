@@ -7,8 +7,5 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
-  },
-  "dependencies": {
-    "astronomy-engine": "^2.1.19"
   }
 }
