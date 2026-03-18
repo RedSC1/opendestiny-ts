@@ -3,3 +3,7 @@ dist/
 build/
 *.tsbuildinfo
 .DS_Store
+
+# 临时数据转换脚本和原始数据
+*.py
+*.txt
