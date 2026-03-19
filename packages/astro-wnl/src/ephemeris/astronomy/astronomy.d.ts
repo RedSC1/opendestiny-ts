@@ -859,11 +859,7 @@ export declare function Ecliptic(eqj: Vector): EclipticCoordinates;
  * with x-, y-, and z-components measured in astronomical units.
  * The coordinates are oriented with respect to the Earth's equator at the J2000 epoch.
  * In Astronomy Engine, this orientation is called EQJ.
- * Based on the Nautical Almanac Office's <i>Improved Lunar Ephemeris</i> of 1954,
- * which in turn derives from E. W. Brown's lunar theories.
- * Adapted from Turbo Pascal code from the book
- * <a href="https://www.springer.com/us/book/9783540672210">Astronomy on the Personal Computer</a>
- * by Montenbruck and Pfleger.
+ * This implementation uses the ELP/MPP02 lunar theory with DE405 constants.
  *
  * @param {FlexibleDateTime} date
  *      The date and time for which to calculate the Moon's geocentric position.

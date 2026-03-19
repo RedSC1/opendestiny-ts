@@ -1,0 +1,11 @@
+export declare const W1: readonly [number, number, number, number, number];
+export declare const PREC_P: readonly [number, number, number, number, number];
+export declare const PREC_Q: readonly [number, number, number, number, number];
+export declare const A405: number;
+export declare const AELP: number;
+export declare const NMPB: readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
+export declare const CMPB: Float64Array;
+export declare const FMPB: Float64Array;
+export declare const NPER: readonly (readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]])[];
+export declare const CPER: Float64Array;
+export declare const FPER: Float64Array;
