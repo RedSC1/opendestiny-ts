@@ -13,7 +13,7 @@ import { sunEclipticLongitude } from '../ephemeris/adapters/sun';
 // ============ 常量 ============
 
 /** 二十四节气名称列表（按阳历年顺序排列） */
-export const jieQiNames: readonly string[] = [
+export const solarTermNames: readonly string[] = [
   '小寒', '大寒', '立春', '雨水', '惊蛰', '春分',
   '清明', '谷雨', '立夏', '小满', '芒种', '夏至',
   '小暑', '大暑', '立秋', '处暑', '白露', '秋分',
@@ -32,10 +32,8 @@ export function isQi(index: number): boolean {
 
 // ============ 结果类型 ============
 
-/** 单个节气的计算结果
- *  jd 为 UT（世界时）J2000 相对儒略日，不含时区偏移。
- */
-export interface JieQiResult {
+/** 单个节气的计算结果（UT） */
+export interface SolarTermResult {
   /** 在当年节气列表中的索引（0-23） */
   readonly index: number;
   /** 节气名称（如"立春"） */
@@ -48,41 +46,41 @@ export interface JieQiResult {
 
 /** 节气区段距离模型 */
 export interface SolarTermSpan {
-  readonly prev: JieQiResult;
-  readonly next: JieQiResult;
+  readonly prev: SolarTermResult;
+  readonly next: SolarTermResult;
   readonly daysSincePrev: number;
   readonly daysUntilNext: number;
   readonly totalDays: number;
   readonly progress: number;
 }
 
-export interface JieDistance extends SolarTermSpan {
-  readonly prevJie: JieQiResult;
-  readonly nextJie: JieQiResult;
+export interface JieSpan extends SolarTermSpan {
+  readonly prevJie: SolarTermResult;
+  readonly nextJie: SolarTermResult;
   readonly daysSincePrevJie: number;
   readonly daysUntilNextJie: number;
   readonly totalJieDays: number;
   readonly jieProgress: number;
 }
 
-export interface QiDistance extends SolarTermSpan {
-  readonly prevQi: JieQiResult;
-  readonly nextQi: JieQiResult;
+export interface QiSpan extends SolarTermSpan {
+  readonly prevQi: SolarTermResult;
+  readonly nextQi: SolarTermResult;
   readonly daysSincePrevQi: number;
   readonly daysUntilNextQi: number;
   readonly totalQiDays: number;
   readonly qiProgress: number;
 }
 
-export interface JieQiInfo {
-  readonly prevJieQi: JieQiResult;
-  readonly nextJieQi: JieQiResult;
-  readonly prevJie: JieQiResult;
-  readonly nextJie: JieQiResult;
-  readonly prevQi: JieQiResult;
-  readonly nextQi: JieQiResult;
-  readonly daysSincePrevJieQi: number;
-  readonly daysUntilNextJieQi: number;
+export interface SolarTermInfo {
+  readonly prevSolarTerm: SolarTermResult;
+  readonly nextSolarTerm: SolarTermResult;
+  readonly prevJie: SolarTermResult;
+  readonly nextJie: SolarTermResult;
+  readonly prevQi: SolarTermResult;
+  readonly nextQi: SolarTermResult;
+  readonly daysSincePrevSolarTerm: number;
+  readonly daysUntilNextSolarTerm: number;
   readonly daysSincePrevJie: number;
   readonly daysUntilNextJie: number;
   readonly daysSincePrevQi: number;
@@ -96,53 +94,52 @@ const TWO_PI = 2 * PI;
 const DEG_PER_RAD = 180 / PI;
 
 /**
- * 高精度定气（国家标准 GB/T 33661-2017）。
+ * 精确节气搜索（UT）。默认 High 精度。
  * 已知太阳视黄经累计弧度 w，反推精确的交节时刻（UT）。
  * w 是累计值：0=1999年春分, 2π=2000年春分, 依此类推。
  * 采用历元真黄道视黄经（含岁差+章动+光行差）。
  * 返回 J2000 相对儒略日（UT）。
  */
-export function qiAccurate(w: number): number {
+export function solarTerm(w: number, precision: Precision = Precision.High): number {
   const targetLon = ((w * DEG_PER_RAD) % 360 + 360) % 360;
 
   // 从 w 估算大致 jd：w=0 对应约 -286 天（1999年春分）
   const yearCount = w / TWO_PI;
   const jdApprox = -286.0 + yearCount * 365.2422;
 
-  return searchSolarTermNewtonWithEstimate(targetLon, jdApprox);
+  return searchSolarTermNewtonWithEstimate(targetLon, jdApprox, precision);
 }
 
 /**
- * 智能定气搜索（国家标准 GB/T 33661-2017）。
+ * 智能节气搜索（UT）。默认 High 精度。
  * 根据给定的儒略日 jd（UT，J2000 相对），自动寻找并计算最近的一个精确节气时刻（UT）。
- * 采用历元真黄道视黄经。
  */
-export function qiAccurate2(jd: number): number {
+export function nearestSolarTerm(jd: number, precision: Precision = Precision.High): number {
   // 用 Low 精度快速估算当前太阳黄经
   const sunLon = sunEclipticLongitude(jd, Precision.Low);
 
   // 对齐到最近的 15° 整数倍（节气档位）
   const targetLon = ((Math.round(sunLon / 15) * 15) % 360 + 360) % 360;
 
-  return searchSolarTermNewtonWithEstimate(targetLon, jd);
+  return searchSolarTermNewtonWithEstimate(targetLon, jd, precision);
 }
 
 /**
- * 获取指定年份的特定节气时刻（单点查询）。
+ * 获取指定年份的特定节气时刻（单点查询）。默认 High 精度。
  * @param year 公历年份
  * @param n 节气序号（0~23），以春分为 0 起点：
  *   0=春分, 1=清明 ... 18=冬至(当年)
  *   19=小寒, 20=大寒, 21=立春, 22=雨水, 23=惊蛰(次年1~3月)
  * @returns J2000 相对儒略日（UT）
  */
-export function getSpecificJieQi(year: number, n: number): number {
+export function specificSolarTerm(year: number, n: number, precision: Precision = Precision.High): number {
   // n 以春分为 0，n >= 19 的节气在次年 1~3 月，天文上属于"上一个天文年"
   const astroYear = n >= 19 ? year - 1 : year;
   const w = (astroYear - 1999) * TWO_PI + n * (Math.PI / 12);
-  return qiAccurate(w);
+  return solarTerm(w, precision);
 }
 
-// ============ 批量查询（返回 UT） ============
+// ============ 批量查询（返回 UT，默认 Med 精度） ============
 
 /** 25 个节气的目标黄经（从上年冬至到当年冬至）：冬至=270°, 小寒=285°, ... */
 const _yearTermLons: readonly number[] = [
@@ -155,22 +152,23 @@ const _yearTermLons: readonly number[] = [
 
 /**
  * 获取指定阳历年的所有节气（共25个，从上年冬至到当年冬至），返回 UT。
+ * 默认 Med 精度。
  */
-export function getYearJieQi(year: number): JieQiResult[] {
-  const results: JieQiResult[] = [];
+export function yearSolarTerms(year: number, precision: Precision = Precision.Medium): SolarTermResult[] {
+  const results: SolarTermResult[] = [];
 
   // 从上年冬至附近开始，用牛顿迭代顺序推进
   let jdApprox = new AstroDateTime(year - 1, 12, 21).toJ2000();
 
   for (let i = 0; i < 25; i++) {
     const targetLon = _yearTermLons[i]!;
-    const result = searchSolarTermNewtonWithEstimate(targetLon, jdApprox);
+    const result = searchSolarTermNewtonWithEstimate(targetLon, jdApprox, precision);
 
     const nameIndex = i === 0 ? 23 : i - 1;
 
     results.push({
       index: nameIndex,
-      name: jieQiNames[nameIndex]!,
+      name: solarTermNames[nameIndex]!,
       jd: result,
       dateTime: AstroDateTime.fromJ2000(result),
     });
@@ -181,9 +179,9 @@ export function getYearJieQi(year: number): JieQiResult[] {
   return results;
 }
 
-/** 获取指定阳历年的所有节气的 Julian Day 数组（UT） */
-export function getYearJieQiJd(year: number): number[] {
-  return getYearJieQi(year).map((r) => r.jd);
+/** 获取指定阳历年的所有节气的 Julian Day 数组（UT）。默认 Med 精度。 */
+export function yearSolarTermJds(year: number, precision: Precision = Precision.Medium): number[] {
+  return yearSolarTerms(year, precision).map((r) => r.jd);
 }
 
 // ============ 内部 slot 定位引擎 ============
@@ -194,7 +192,7 @@ export function getYearJieQiJd(year: number): number[] {
 const _dSlot = Math.PI / 12;
 
 /** 获取指定时间的精确当前 slot 编号（jd 落在 [slot, slot+1) 区间内） */
-function _currentSlot(jd: number): number {
+function _currentSlot(jd: number, precision: Precision): number {
   // 1. 粗放估算：1999 年春分约在 jd=-286.1
   let slot = Math.floor(((jd + 286.1) / 365.2422) * 24);
 
@@ -202,11 +200,11 @@ function _currentSlot(jd: number): number {
   const epsilon = 1.0 / 86400; // 1 秒宽容度
 
   while (true) {
-    const currentQi = qiAccurate(slot * _dSlot);
+    const currentQi = solarTerm(slot * _dSlot, precision);
     if (jd < currentQi - epsilon) {
       slot--;
     } else {
-      const nextQi = qiAccurate((slot + 1) * _dSlot);
+      const nextQi = solarTerm((slot + 1) * _dSlot, precision);
       if (jd >= nextQi - epsilon) {
         slot++;
       } else {
@@ -218,92 +216,92 @@ function _currentSlot(jd: number): number {
   return slot;
 }
 
-/** slot → jieQiNames 索引 */
+/** slot → solarTermNames 索引 */
 function _slotToIndex(slot: number): number {
   return ((slot % 24) + 5 + 24) % 24;
 }
 
-/** slot → JieQiResult */
-function _slotToResult(slot: number): JieQiResult {
-  const jd = qiAccurate(slot * _dSlot);
+/** slot → SolarTermResult */
+function _slotToResult(slot: number, precision: Precision): SolarTermResult {
+  const jd = solarTerm(slot * _dSlot, precision);
   const idx = _slotToIndex(slot);
   return {
     index: idx,
-    name: jieQiNames[idx]!,
+    name: solarTermNames[idx]!,
     jd,
     dateTime: AstroDateTime.fromJ2000(jd),
   };
 }
 
 /** 向前搜索（含可选过滤） */
-function _findPrev(jd: number, filter?: (index: number) => boolean): JieQiResult {
-  let slot = _currentSlot(jd);
+function _findPrev(jd: number, precision: Precision, filter?: (index: number) => boolean): SolarTermResult {
+  let slot = _currentSlot(jd, precision);
   if (filter) {
     while (!filter(_slotToIndex(slot))) {
       slot--;
     }
   }
-  return _slotToResult(slot);
+  return _slotToResult(slot, precision);
 }
 
 /** 向后搜索（含可选过滤） */
-function _findNext(jd: number, filter?: (index: number) => boolean): JieQiResult {
-  let slot = _currentSlot(jd) + 1;
+function _findNext(jd: number, precision: Precision, filter?: (index: number) => boolean): SolarTermResult {
+  let slot = _currentSlot(jd, precision) + 1;
   if (filter) {
     while (!filter(_slotToIndex(slot))) {
       slot++;
     }
   }
-  return _slotToResult(slot);
+  return _slotToResult(slot, precision);
 }
 
-// ============ 单点查询 API（输入/输出均为 UT） ============
+// ============ 单点查询 API（输入/输出均为 UT，默认 Med 精度） ============
 
-export function getPrevJieQi(target: AstroDateTime): JieQiResult {
-  return getPrevJieQiFromJd(target.toJ2000());
+export function prevSolarTerm(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return prevSolarTermFromJd(target.toJ2000(), precision);
 }
-export function getPrevJieQiFromJd(jd: number): JieQiResult {
-  return _findPrev(jd);
+export function prevSolarTermFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findPrev(jd, precision);
 }
-export function getNextJieQi(target: AstroDateTime): JieQiResult {
-  return getNextJieQiFromJd(target.toJ2000());
+export function nextSolarTerm(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return nextSolarTermFromJd(target.toJ2000(), precision);
 }
-export function getNextJieQiFromJd(jd: number): JieQiResult {
-  return _findNext(jd);
-}
-
-export function getPrevJie(target: AstroDateTime): JieQiResult {
-  return getPrevJieFromJd(target.toJ2000());
-}
-export function getPrevJieFromJd(jd: number): JieQiResult {
-  return _findPrev(jd, isJie);
-}
-export function getNextJie(target: AstroDateTime): JieQiResult {
-  return getNextJieFromJd(target.toJ2000());
-}
-export function getNextJieFromJd(jd: number): JieQiResult {
-  return _findNext(jd, isJie);
+export function nextSolarTermFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findNext(jd, precision);
 }
 
-export function getPrevQi(target: AstroDateTime): JieQiResult {
-  return getPrevQiFromJd(target.toJ2000());
+export function prevJie(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return prevJieFromJd(target.toJ2000(), precision);
 }
-export function getPrevQiFromJd(jd: number): JieQiResult {
-  return _findPrev(jd, isQi);
+export function prevJieFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findPrev(jd, precision, isJie);
 }
-export function getNextQi(target: AstroDateTime): JieQiResult {
-  return getNextQiFromJd(target.toJ2000());
+export function nextJie(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return nextJieFromJd(target.toJ2000(), precision);
 }
-export function getNextQiFromJd(jd: number): JieQiResult {
-  return _findNext(jd, isQi);
+export function nextJieFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findNext(jd, precision, isJie);
+}
+
+export function prevQi(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return prevQiFromJd(target.toJ2000(), precision);
+}
+export function prevQiFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findPrev(jd, precision, isQi);
+}
+export function nextQi(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermResult {
+  return nextQiFromJd(target.toJ2000(), precision);
+}
+export function nextQiFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermResult {
+  return _findNext(jd, precision, isQi);
 }
 
 // ============ 距离查询 API ============
 
 function _getSpan(
   targetJd: number,
-  prevGetter: (jd: number) => JieQiResult,
-  nextGetter: (jd: number) => JieQiResult,
+  prevGetter: (jd: number) => SolarTermResult,
+  nextGetter: (jd: number) => SolarTermResult,
 ): SolarTermSpan {
   const prev = prevGetter(targetJd);
   const next = nextGetter(targetJd);
@@ -320,18 +318,18 @@ function _getSpan(
   };
 }
 
-export function getJieQiDistance(target: AstroDateTime): SolarTermSpan {
-  return getJieQiDistanceFromJd(target.toJ2000());
+export function solarTermSpan(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermSpan {
+  return solarTermSpanFromJd(target.toJ2000(), precision);
 }
-export function getJieQiDistanceFromJd(jd: number): SolarTermSpan {
-  return _getSpan(jd, getPrevJieQiFromJd, getNextJieQiFromJd);
+export function solarTermSpanFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermSpan {
+  return _getSpan(jd, (j) => prevSolarTermFromJd(j, precision), (j) => nextSolarTermFromJd(j, precision));
 }
 
-export function getJieDistance(target: AstroDateTime): JieDistance {
-  return getJieDistanceFromJd(target.toJ2000());
+export function jieSpan(target: AstroDateTime, precision: Precision = Precision.Medium): JieSpan {
+  return jieSpanFromJd(target.toJ2000(), precision);
 }
-export function getJieDistanceFromJd(jd: number): JieDistance {
-  const s = _getSpan(jd, getPrevJieFromJd, getNextJieFromJd);
+export function jieSpanFromJd(jd: number, precision: Precision = Precision.Medium): JieSpan {
+  const s = _getSpan(jd, (j) => prevJieFromJd(j, precision), (j) => nextJieFromJd(j, precision));
   return {
     ...s,
     prevJie: s.prev,
@@ -343,11 +341,11 @@ export function getJieDistanceFromJd(jd: number): JieDistance {
   };
 }
 
-export function getQiDistance(target: AstroDateTime): QiDistance {
-  return getQiDistanceFromJd(target.toJ2000());
+export function qiSpan(target: AstroDateTime, precision: Precision = Precision.Medium): QiSpan {
+  return qiSpanFromJd(target.toJ2000(), precision);
 }
-export function getQiDistanceFromJd(jd: number): QiDistance {
-  const s = _getSpan(jd, getPrevQiFromJd, getNextQiFromJd);
+export function qiSpanFromJd(jd: number, precision: Precision = Precision.Medium): QiSpan {
+  const s = _getSpan(jd, (j) => prevQiFromJd(j, precision), (j) => nextQiFromJd(j, precision));
   return {
     ...s,
     prevQi: s.prev,
@@ -359,27 +357,27 @@ export function getQiDistanceFromJd(jd: number): QiDistance {
   };
 }
 
-export function getJieQiInfo(target: AstroDateTime): JieQiInfo {
-  return getJieQiInfoFromJd(target.toJ2000());
+export function solarTermInfo(target: AstroDateTime, precision: Precision = Precision.Medium): SolarTermInfo {
+  return solarTermInfoFromJd(target.toJ2000(), precision);
 }
 
-export function getJieQiInfoFromJd(jd: number): JieQiInfo {
-  const prevJieQi = getPrevJieQiFromJd(jd);
-  const nextJieQi = getNextJieQiFromJd(jd);
-  const prevJie = getPrevJieFromJd(jd);
-  const nextJie = getNextJieFromJd(jd);
-  const prevQi = getPrevQiFromJd(jd);
-  const nextQi = getNextQiFromJd(jd);
+export function solarTermInfoFromJd(jd: number, precision: Precision = Precision.Medium): SolarTermInfo {
+  const prevSolarTerm = prevSolarTermFromJd(jd, precision);
+  const nextSolarTerm = nextSolarTermFromJd(jd, precision);
+  const prevJie = prevJieFromJd(jd, precision);
+  const nextJie = nextJieFromJd(jd, precision);
+  const prevQi = prevQiFromJd(jd, precision);
+  const nextQi = nextQiFromJd(jd, precision);
 
   return {
-    prevJieQi,
-    nextJieQi,
+    prevSolarTerm,
+    nextSolarTerm,
     prevJie,
     nextJie,
     prevQi,
     nextQi,
-    daysSincePrevJieQi: jd - prevJieQi.jd,
-    daysUntilNextJieQi: nextJieQi.jd - jd,
+    daysSincePrevSolarTerm: jd - prevSolarTerm.jd,
+    daysUntilNextSolarTerm: nextSolarTerm.jd - jd,
     daysSincePrevJie: jd - prevJie.jd,
     daysUntilNextJie: nextJie.jd - jd,
     daysSincePrevQi: jd - prevQi.jd,
@@ -389,21 +387,21 @@ export function getJieQiInfoFromJd(jd: number): JieQiInfo {
 
 // ============ Julian Day 便捷接口（UT） ============
 
-export function getPrevJieQiJd(target: AstroDateTime): number {
-  return getPrevJieQiFromJd(target.toJ2000()).jd;
+export function prevSolarTermJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return prevSolarTermFromJd(target.toJ2000(), precision).jd;
 }
-export function getNextJieQiJd(target: AstroDateTime): number {
-  return getNextJieQiFromJd(target.toJ2000()).jd;
+export function nextSolarTermJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return nextSolarTermFromJd(target.toJ2000(), precision).jd;
 }
-export function getPrevJieJd(target: AstroDateTime): number {
-  return getPrevJieFromJd(target.toJ2000()).jd;
+export function prevJieJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return prevJieFromJd(target.toJ2000(), precision).jd;
 }
-export function getNextJieJd(target: AstroDateTime): number {
-  return getNextJieFromJd(target.toJ2000()).jd;
+export function nextJieJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return nextJieFromJd(target.toJ2000(), precision).jd;
 }
-export function getPrevQiJd(target: AstroDateTime): number {
-  return getPrevQiFromJd(target.toJ2000()).jd;
+export function prevQiJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return prevQiFromJd(target.toJ2000(), precision).jd;
 }
-export function getNextQiJd(target: AstroDateTime): number {
-  return getNextQiFromJd(target.toJ2000()).jd;
+export function nextQiJd(target: AstroDateTime, precision: Precision = Precision.Medium): number {
+  return nextQiFromJd(target.toJ2000(), precision).jd;
 }

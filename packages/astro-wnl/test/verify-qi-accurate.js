@@ -1,12 +1,12 @@
 /**
- * 验证 qiAccurate Newton 迭代在不同年份的收敛情况
+ * 验证 solarTerm Newton 迭代在不同年份的收敛情况
  */
 
-const { qiAccurate, getSpecificJieQi } = require('../dist/core/jie-qi');
+const { solarTerm, specificSolarTerm } = require('../dist/core/jie-qi');
 
 function testQiAccurate(year, n, expectedMonth, expectedDay) {
   try {
-    const jd = getSpecificJieQi(year, n);
+    const jd = specificSolarTerm(year, n);
     const AstroDateTime = require('../dist/utils/astro_date_time').default;
     const dt = AstroDateTime.fromJ2000(jd);
     console.log(
@@ -40,12 +40,12 @@ console.log('\n=== 远期 ===');
 testQiAccurate(3000, 0);
 
 console.log('\n=== 全年25节气（2024）===');
-const { getYearJieQi } = require('../dist/core/jie-qi');
+const { yearSolarTerms } = require('../dist/core/jie-qi');
 try {
-  const results = getYearJieQi(2024);
+  const results = yearSolarTerms(2024);
   results.forEach((r, i) => {
     console.log(`  ${i}: ${r.name} ${r.dateTime.toString()} (JD=${r.jd.toFixed(5)})`);
   });
 } catch (e) {
-  console.log(`getYearJieQi(2024) FAILED: ${e.message}`);
+  console.log(`yearSolarTerms(2024) FAILED: ${e.message}`);
 }
