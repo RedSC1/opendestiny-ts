@@ -171,6 +171,108 @@ function searchLunarPhaseTwoPhase(
   return fine ? fine.ut : null;
 }
 
+// ============ 割线法朔望搜索 ============
+
+/**
+ * 月日视黄经差（度）。
+ */
+function _lunarPhaseOffset(jd: number, targetPhase: number, precision: Precision): number {
+  const sunLon = sunEclipticLongitude(jd, precision);
+  const moon = moonEclipticPosition(jd, precision);
+  const diff = longitudeOffset(moon.elon - sunLon);
+  return longitudeOffset(diff - targetPhase);
+}
+
+/**
+ * 割线法搜索月相时刻（朔/上弦/望/下弦）。
+ *
+ * 不需要解析导数，用差商近似。
+ * 收敛速度约 1.618 阶，通常 4-6 次迭代。
+ *
+ * @param targetPhase 目标月相角（度）：0=朔, 90=上弦, 180=望, 270=下弦
+ * @param jdApprox    近似时刻（J2000 相对 UT），允许偏差数天
+ * @param precision   精度等级
+ * @returns 精确时刻（J2000 相对 UT 儒略日）
+ */
+export function searchLunarPhaseSecant(
+  targetPhase: number,
+  jdApprox: number,
+  precision: Precision = Precision.High,
+): number {
+  // 初值修正：月日黄经差每天变化约 12.19°
+  const f0 = _lunarPhaseOffset(jdApprox, targetPhase, precision);
+  const jdInit = jdApprox - f0 / 12.19;
+
+  let x0 = jdInit;
+  let x1 = jdInit + 0.1; // 第二个初值，偏离 0.1 天
+  let fx0 = _lunarPhaseOffset(x0, targetPhase, precision);
+
+  for (let i = 0; i < 10; i++) {
+    const fx1 = _lunarPhaseOffset(x1, targetPhase, precision);
+    const dx = x1 - x0;
+    const df = fx1 - fx0;
+
+    if (Math.abs(df) < 1e-12) break; // 防除零
+
+    const x2 = x1 - fx1 * dx / df;
+
+    if (Math.abs(x2 - x1) < 1e-7) break; // 收敛到 0.01 秒
+
+    x0 = x1;
+    fx0 = fx1;
+    x1 = x2;
+  }
+
+  return x1;
+}
+
+/**
+ * 带初值修正的割线法朔望搜索。
+ *
+ * 防御性兜底：
+ * - 若结果偏离初值超过 100 天，回退到二分搜索
+ * - 若残差大于 0.001°，回退到二分搜索
+ *
+ * @param targetPhase 目标月相角（度）
+ * @param jdApprox    任意近似时刻（J2000 相对 UT）
+ * @returns 精确时刻（J2000 相对 UT 儒略日）
+ */
+export function searchLunarPhaseSecantWithFallback(
+  targetPhase: number,
+  jdApprox: number,
+): number {
+  // 用 Low 精度做初值修正（快）
+  const f0 = _lunarPhaseOffset(jdApprox, targetPhase, Precision.Low);
+  const jdInit = jdApprox - f0 / 12.19;
+
+  // 割线法用 High 精度精修
+  const jdSecant = searchLunarPhaseSecant(targetPhase, jdInit, Precision.High);
+
+  // === 防御性兜底 ===
+
+  if (Math.abs(jdSecant - jdInit) > 100) {
+    const fallback = searchLunarPhase(targetPhase, jdInit - 30, 60, Precision.High);
+    if (fallback !== null) return fallback;
+    throw new Error(
+      `searchLunarPhaseSecant: period jump detected ` +
+      `(init=${jdInit.toFixed(2)}, secant=${jdSecant.toFixed(2)}).`,
+    );
+  }
+
+  const residual = Math.abs(
+    _lunarPhaseOffset(jdSecant, targetPhase, Precision.High),
+  );
+  if (residual > 0.001) {
+    const fallback = searchLunarPhase(targetPhase, jdSecant - 5, 10, Precision.High);
+    if (fallback !== null) return fallback;
+    throw new Error(
+      `searchLunarPhaseSecant: large residual (${residual.toFixed(6)}°).`,
+    );
+  }
+
+  return jdSecant;
+}
+
 // ============ 牛顿迭代节气搜索 ============
 
 /**

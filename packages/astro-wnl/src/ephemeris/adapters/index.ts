@@ -11,4 +11,4 @@ export { sunEclipticLongitude, sunEclipticLongitudeWithDerivative } from './sun'
 export { moonEclipticPosition } from './moon';
 export type { MoonSpherical } from './moon';
 
-export { searchSolarTerm, searchLunarPhase, searchSolarTermNewton, searchSolarTermNewtonWithEstimate } from './search';
+export { searchSolarTerm, searchLunarPhase, searchSolarTermNewton, searchSolarTermNewtonWithEstimate, searchLunarPhaseSecant, searchLunarPhaseSecantWithFallback } from './search';
