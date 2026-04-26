@@ -12,6 +12,7 @@ import AstroDateTime from '../utils/astro_date_time';
 import type { GanZhi, BaZi } from './gan-zhi';
 import type { JieQiResult } from './jie-qi';
 import type { ShuoWangResult } from './shuo-wang';
+import { PolarStatus } from '../enums/polar-status';
 
 // ============ 时区工具 ============
 
@@ -52,14 +53,6 @@ export interface Festival {
   readonly name: string;
   readonly level: FestivalLevel;
   readonly source: FestivalSource;
-}
-
-// ============ 极昼极夜状态 ============
-
-export enum PolarStatus {
-  none = 'none',
-  polarDay = 'polarDay',
-  polarNight = 'polarNight',
 }
 
 // ============ 单日信息 ============
