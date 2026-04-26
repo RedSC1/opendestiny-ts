@@ -11,7 +11,7 @@
 import AstroDateTime from '../utils/astro_date_time';
 import type { GanZhi, BaZi } from './gan-zhi';
 import type { JieQiResult } from './jie-qi';
-import type { ShuoWangResult } from './shuo-wang';
+import type { MoonPhaseResult } from './shuo-wang';
 import { PolarStatus } from '../enums/polar-status';
 
 // ============ 时区工具 ============

@@ -235,23 +235,25 @@ export function searchLunarPhaseSecant(
  *
  * @param targetPhase 目标月相角（度）
  * @param jdApprox    任意近似时刻（J2000 相对 UT）
+ * @param precision   精度等级，默认 High
  * @returns 精确时刻（J2000 相对 UT 儒略日）
  */
 export function searchLunarPhaseSecantWithFallback(
   targetPhase: number,
   jdApprox: number,
+  precision: Precision = Precision.High,
 ): number {
   // 用 Low 精度做初值修正（快）
   const f0 = _lunarPhaseOffset(jdApprox, targetPhase, Precision.Low);
   const jdInit = jdApprox - f0 / 12.19;
 
-  // 割线法用 High 精度精修
-  const jdSecant = searchLunarPhaseSecant(targetPhase, jdInit, Precision.High);
+  // 割线法用指定精度精修
+  const jdSecant = searchLunarPhaseSecant(targetPhase, jdInit, precision);
 
   // === 防御性兜底 ===
 
   if (Math.abs(jdSecant - jdInit) > 100) {
-    const fallback = searchLunarPhase(targetPhase, jdInit - 30, 60, Precision.High);
+    const fallback = searchLunarPhase(targetPhase, jdInit - 30, 60, precision);
     if (fallback !== null) return fallback;
     throw new Error(
       `searchLunarPhaseSecant: period jump detected ` +
@@ -260,10 +262,10 @@ export function searchLunarPhaseSecantWithFallback(
   }
 
   const residual = Math.abs(
-    _lunarPhaseOffset(jdSecant, targetPhase, Precision.High),
+    _lunarPhaseOffset(jdSecant, targetPhase, precision),
   );
   if (residual > 0.001) {
-    const fallback = searchLunarPhase(targetPhase, jdSecant - 5, 10, Precision.High);
+    const fallback = searchLunarPhase(targetPhase, jdSecant - 5, 10, precision);
     if (fallback !== null) return fallback;
     throw new Error(
       `searchLunarPhaseSecant: large residual (${residual.toFixed(6)}°).`,
