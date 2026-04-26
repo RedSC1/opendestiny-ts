@@ -43,11 +43,14 @@ export function isTianGanYin(gan: TianGan): boolean {
   return gan % 2 === 1;
 }
 
-/** 根据名称/中文查找天干 */
+/** 根据名称/中文/拼音查找天干（大小写不敏感） */
 export function tianGanFromName(name: string): TianGan {
   const idx = tianGanLabels.indexOf(name);
   if (idx >= 0) return idx as TianGan;
-  const e = Object.entries(TianGan).find(([, v]) => typeof v === 'number' && v.toString() === name);
+  const lower = name.toLowerCase();
+  const e = Object.entries(TianGan).find(
+    ([k, v]) => typeof v === 'number' && (k.toLowerCase() === lower || v.toString() === name),
+  );
   if (e) return e[1] as TianGan;
   throw new Error(`Invalid TianGan: ${name}`);
 }
@@ -78,11 +81,14 @@ export function getDiZhiLabel(zhi: DiZhi): string {
   return diZhiLabels[zhi]!;
 }
 
-/** 根据名称/中文查找地支 */
+/** 根据名称/中文/拼音查找地支（大小写不敏感） */
 export function diZhiFromName(name: string): DiZhi {
   const idx = diZhiLabels.indexOf(name);
   if (idx >= 0) return idx as DiZhi;
-  const e = Object.entries(DiZhi).find(([, v]) => typeof v === 'number' && v.toString() === name);
+  const lower = name.toLowerCase();
+  const e = Object.entries(DiZhi).find(
+    ([k, v]) => typeof v === 'number' && (k.toLowerCase() === lower || v.toString() === name),
+  );
   if (e) return e[1] as DiZhi;
   throw new Error(`Invalid DiZhi: ${name}`);
 }
@@ -95,6 +101,11 @@ export const shengXiaoLabels: readonly string[] = ['鼠', '牛', '虎', '兔', '
 /** 根据地支配生肖 */
 export function diZhiToShengXiao(zhi: DiZhi): string {
   return shengXiaoLabels[zhi]!;
+}
+
+/** 处理环形索引（内部辅助） */
+function _cycleIndex(current: number, step: number, mod: number): number {
+  return ((current + step) % mod + mod) % mod;
 }
 
 // ============ 六十甲子 ============
@@ -139,7 +150,7 @@ export class GanZhi {
   /** 根据六十甲子序号构造 */
   static fromIndex(index: number): GanZhi {
     const i = ((index % 60) + 60) % 60;
-    return new GanZhi(i % 10, i % 12);
+    return new GanZhi(i % 10 as TianGan, i % 12 as DiZhi);
   }
 
   /** 天干中文名 */
@@ -179,7 +190,9 @@ export class GanZhi {
 
   /** 前进/后退 step 个干支（可负数） */
   offset(step: number): GanZhi {
-    return GanZhi.fromIndex(this.index + step);
+    const newStemIndex = _cycleIndex(this.gan, step, 10);
+    const newBranchIndex = _cycleIndex(this.zhi, step, 12);
+    return new GanZhi(newStemIndex as TianGan, newBranchIndex as DiZhi);
   }
 
   /** 前进 step 个干支 */
@@ -198,9 +211,13 @@ export class GanZhi {
     if (k1 < 0) k1 += 12;
     const k2 = (k1 + 1) % 12;
     if (this.isYang) {
-      return k1 % 2 === 0 ? [k1, k2] : [k2, k1];
+      return k1 % 2 === 0
+        ? [k1 as DiZhi, k2 as DiZhi]
+        : [k2 as DiZhi, k1 as DiZhi];
     }
-    return k1 % 2 !== 0 ? [k1, k2] : [k2, k1];
+    return k1 % 2 !== 0
+      ? [k1 as DiZhi, k2 as DiZhi]
+      : [k2 as DiZhi, k1 as DiZhi];
   }
 
   toString(): string {
@@ -219,17 +236,17 @@ export class BaZi {
   /** 日柱 */
   readonly day: GanZhi;
   /** 时柱 */
-  readonly hour: GanZhi;
+  readonly time: GanZhi;
 
-  constructor(year: GanZhi, month: GanZhi, day: GanZhi, hour: GanZhi) {
+  constructor(year: GanZhi, month: GanZhi, day: GanZhi, time: GanZhi) {
     this.year = year;
     this.month = month;
     this.day = day;
-    this.hour = hour;
+    this.time = time;
   }
 
   toString(): string {
-    return `${this.year} ${this.month} ${this.day} ${this.hour}`;
+    return `${this.year} ${this.month} ${this.day} ${this.time}`;
   }
 }
 

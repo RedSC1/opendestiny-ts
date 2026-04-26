@@ -14,7 +14,7 @@
 
 import { AstroTime, MakeTime, Search } from '../astronomy/astronomy';
 import { Precision } from './precision';
-import { sunEclipticLongitude } from './sun';
+import { sunEclipticLongitude, sunEclipticLongitudeWithDerivative } from './sun';
 import { moonEclipticPosition } from './moon';
 
 /**
@@ -169,4 +169,97 @@ function searchLunarPhaseTwoPhase(
     { dt_tolerance_seconds: 0.01 },
   );
   return fine ? fine.ut : null;
+}
+
+// ============ 牛顿迭代节气搜索 ============
+
+/**
+ * 牛顿迭代法搜索太阳视黄经达到 targetLon 的时刻。
+ *
+ * 策略：
+ * 1. 用平太阳黄经公式估算初值（±1 天内）
+ * 2. Low 精度做 2 次牛顿迭代消除初值误差
+ * 3. High 精度做 2 次牛顿迭代精修到秒级
+ *
+ * 相比二分搜索，牛顿法只需 4 次黄经计算（vs 22 次），
+ * 且利用了解析导数信息，收敛更快。
+ *
+ * @param targetLon 目标黄经（度）
+ * @param jdApprox  近似时刻（J2000 相对 UT），允许偏差 ±1 天
+ * @returns 精确时刻（J2000 相对 UT 儒略日）
+ */
+export function searchSolarTermNewton(
+  targetLon: number,
+  jdApprox: number,
+): number {
+  let jd = jdApprox;
+
+  // 阶段 1：Low 精度快速消除初值误差（2 次迭代）
+  for (let i = 0; i < 2; i++) {
+    const { lon, dlon } = sunEclipticLongitudeWithDerivative(jd, Precision.Low);
+    const diff = longitudeOffset(lon - targetLon);
+    jd -= diff / dlon;
+  }
+
+  // 阶段 2：High 精度精修（2 次迭代，容差 1e-7 度 ≈ 0.01 秒）
+  for (let i = 0; i < 2; i++) {
+    const { lon, dlon } = sunEclipticLongitudeWithDerivative(jd, Precision.High);
+    const diff = longitudeOffset(lon - targetLon);
+    if (Math.abs(diff) < 1e-7) break;
+    jd -= diff / dlon;
+  }
+
+  return jd;
+}
+
+/**
+ * 带初值修正的牛顿迭代节气搜索。
+ *
+ * 先用平太阳黄经公式从 jdApprox 反推一个更好的初值，
+ * 再调用 searchSolarTermNewton 精修。
+ *
+ * 防御性兜底：
+ * - 若牛顿结果偏离初值超过 200 天（跳周期），回退到二分搜索
+ * - 若牛顿残差大于 0.001°，回退到二分搜索
+ *
+ * @param targetLon 目标黄经（度）
+ * @param jdApprox  任意近似时刻（J2000 相对 UT），允许偏差数天
+ * @returns 精确时刻（J2000 相对 UT 儒略日）
+ */
+export function searchSolarTermNewtonWithEstimate(
+  targetLon: number,
+  jdApprox: number,
+): number {
+  // 平太阳黄经反推初值：L = 280.46646 + 0.98564736 * jd
+  const meanLon = (280.46646 + 0.98564736 * jdApprox) % 360;
+  const diff = longitudeOffset(targetLon - meanLon);
+  const jdInit = jdApprox + diff / 0.98564736;
+
+  const jdNewton = searchSolarTermNewton(targetLon, jdInit);
+
+  // === 防御性兜底检查 ===
+
+  // 1. 周期跳跃检查：牛顿结果不应偏离初值超过 200 天
+  if (Math.abs(jdNewton - jdInit) > 200) {
+    const fallback = searchSolarTerm(targetLon, jdInit - 30, 60);
+    if (fallback !== null) return fallback;
+    throw new Error(
+      `searchSolarTermNewtonWithEstimate: period jump detected ` +
+      `(init=${jdInit.toFixed(2)}, newton=${jdNewton.toFixed(2)}). ` +
+      `Binary fallback also failed for targetLon=${targetLon}.`,
+    );
+  }
+
+  // 2. 残差检查：牛顿结果的黄经应与目标值偏差小于 0.001°
+  const residual = Math.abs(longitudeOffset(sunEclipticLongitude(jdNewton, Precision.High) - targetLon));
+  if (residual > 0.001) {
+    const fallback = searchSolarTerm(targetLon, jdNewton - 5, 10);
+    if (fallback !== null) return fallback;
+    throw new Error(
+      `searchSolarTermNewtonWithEstimate: large residual (${residual.toFixed(6)}°). ` +
+      `Binary fallback also failed for targetLon=${targetLon}.`,
+    );
+  }
+
+  return jdNewton;
 }

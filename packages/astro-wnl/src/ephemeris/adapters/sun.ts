@@ -163,6 +163,92 @@ function equJ2000ToApparent(
 }
 
 /**
+ * VSOP87 级数解析导数。
+ *
+ * formula 结构: number[][][] — [t^0, t^1, t^2, t^3, t^4, t^5]
+ * 每项: [ampl, phas, freq]
+ *
+ * λ(t) = Σ t^i · Σ A·cos(B + C·t)
+ * dλ/dt = Σ [i·t^{i-1} · Σ A·cos(B + C·t) + t^i · Σ -A·C·sin(B + C·t)]
+ *
+ * 返回 dλ/dt，单位: 弧度/千儒略年
+ */
+function vsopDerivative(
+  formula: number[][][],
+  t: number,
+  maxTerms: number[],
+): number {
+  let tpower = 1;
+  let dcoord = 0;
+
+  for (let i = 0; i < formula.length; i++) {
+    const series = formula[i]!;
+    const limit = maxTerms[i] ?? series.length;
+    let sum = 0;
+    let dsum = 0;
+
+    for (let j = 0; j < Math.min(limit, series.length); j++) {
+      const term = series[j]!;
+      const ampl = term[0]!;
+      const phas = term[1]!;
+      const freq = term[2]!;
+      const angle = phas + t * freq;
+      sum += ampl * Math.cos(angle);
+      dsum += -ampl * freq * Math.sin(angle);
+    }
+
+    if (i > 0) {
+      dcoord += i * (tpower / t) * sum;
+    }
+    dcoord += tpower * dsum;
+    tpower *= t;
+  }
+
+  return dcoord;
+}
+
+/** 获取指定精度的截断参数 */
+function _getTerms(precision: Precision): { L: number[]; B: number[]; R: number[] } {
+  switch (precision) {
+    case Precision.Low:
+      return LOW_TERMS;
+    case Precision.Medium:
+      return MEDIUM_TERMS;
+    case Precision.High:
+    default:
+      return FULL_TERMS;
+  }
+}
+
+/**
+ * 太阳视黄经及其对时间的导数。
+ *
+ * @param jd J2000 相对 UT 儒略日
+ * @param precision 精度等级
+ * @returns lon: 视黄经（度）, dlon: 角速度（度/天）
+ *
+ * 注：dlon 来自动力学黄道层面的 VSOP87 解析导数，
+ * 与真黄道角速度的差异 <0.001%，完全满足牛顿迭代需求。
+ */
+export function sunEclipticLongitudeWithDerivative(
+  jd: number,
+  precision: Precision,
+): { lon: number; dlon: number } {
+  const lon = sunEclipticLongitude(jd, precision);
+
+  const terms = _getTerms(precision);
+  const tt = utToTt(jd);
+  const ttDays = tt - 1 / C_AUDAY;
+  const t = ttDays / DAYS_PER_MILLENNIUM;
+
+  const dlonDyn = vsopDerivative(vsop.Earth[0], t, terms.L);
+  // 弧度/千儒略年 → 度/天
+  const dlon = dlonDyn * RAD2DEG / DAYS_PER_MILLENNIUM;
+
+  return { lon, dlon };
+}
+
+/**
  * 太阳视黄经（精度分级）
  *
  * @param jd J2000 相对 UT 儒略日

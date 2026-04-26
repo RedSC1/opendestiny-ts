@@ -7,8 +7,8 @@
 
 export { Precision } from './precision';
 
-export { sunEclipticLongitude } from './sun';
+export { sunEclipticLongitude, sunEclipticLongitudeWithDerivative } from './sun';
 export { moonEclipticPosition } from './moon';
 export type { MoonSpherical } from './moon';
 
-export { searchSolarTerm, searchLunarPhase } from './search';
+export { searchSolarTerm, searchLunarPhase, searchSolarTermNewton, searchSolarTermNewtonWithEstimate } from './search';
