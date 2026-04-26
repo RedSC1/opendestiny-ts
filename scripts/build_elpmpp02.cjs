@@ -13,12 +13,14 @@ const A405 = 384747.9613701725;
 const AELP = 384747.980674318;
 const MAX1 = 2645;
 const MAX2 = 33256;
+const TRUNC_5E3_THRESHOLD = 5e-3;
 const TRUNC_5E4_THRESHOLD = 5e-4;
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(ROOT_DIR, 'data', 'elpmpp02');
 const OUT_DIR = path.join(ROOT_DIR, 'packages', 'astro-wnl', 'src', 'ephemeris', 'astronomy');
 const OUT_FILE_FULL = path.join(OUT_DIR, 'elpmpp02_data.js');
+const OUT_FILE_TRUNC_5E3 = path.join(OUT_DIR, 'elpmpp02_data_5e3.js');
 const OUT_FILE_TRUNC_5E4 = path.join(OUT_DIR, 'elpmpp02_data_5e4.js');
 
 function dms(degValue, minValue, secValue) {
@@ -457,29 +459,42 @@ function main() {
   const constants = initializeConstants(1);
   const mainSeries = buildMainSeries(constants);
   const fullPertSeries = buildPertSeries(constants);
-  const truncPertSeries = truncatePertSeries(fullPertSeries, TRUNC_5E4_THRESHOLD);
+  const truncPertSeries5e3 = truncatePertSeries(fullPertSeries, TRUNC_5E3_THRESHOLD);
+  const truncPertSeries5e4 = truncatePertSeries(fullPertSeries, TRUNC_5E4_THRESHOLD);
 
   const outputFull = generateDataModule(constants, mainSeries, fullPertSeries, '完整 DE405 表');
+  const outputTrunc5e3 = generateDataModule(
+    constants,
+    mainSeries,
+    truncPertSeries5e3,
+    `5e-3 截断表（仅保留 t^0 摄动中 |A| >= ${formatNumber(TRUNC_5E3_THRESHOLD)} 的项；t^1/t^2/t^3 全保留）`,
+  );
   const outputTrunc5e4 = generateDataModule(
     constants,
     mainSeries,
-    truncPertSeries,
+    truncPertSeries5e4,
     `5e-4 截断表（仅保留 t^0 摄动中 |A| >= ${formatNumber(TRUNC_5E4_THRESHOLD)} 的项；t^1/t^2/t^3 全保留）`,
   );
 
   fs.writeFileSync(OUT_FILE_FULL, outputFull, 'utf8');
+  fs.writeFileSync(OUT_FILE_TRUNC_5E3, outputTrunc5e3, 'utf8');
   fs.writeFileSync(OUT_FILE_TRUNC_5E4, outputTrunc5e4, 'utf8');
 
   const fullT0 = countPertTerms(fullPertSeries, 0);
-  const truncT0 = countPertTerms(truncPertSeries, 0);
+  const truncT0_5e3 = countPertTerms(truncPertSeries5e3, 0);
+  const truncT0_5e4 = countPertTerms(truncPertSeries5e4, 0);
   const higherOrder = countPertTerms(fullPertSeries, 1) + countPertTerms(fullPertSeries, 2) + countPertTerms(fullPertSeries, 3);
 
   console.log(`已生成: ${path.relative(ROOT_DIR, OUT_FILE_FULL)}`);
+  console.log(`已生成: ${path.relative(ROOT_DIR, OUT_FILE_TRUNC_5E3)}`);
   console.log(`已生成: ${path.relative(ROOT_DIR, OUT_FILE_TRUNC_5E4)}`);
   console.log(`主问题: ${mainSeries.CMPB.length} 项`);
   console.log(`完整版摄动: ${fullPertSeries.CPER.length} 项`);
   console.log(
-    `5e-4 截断摄动: ${truncPertSeries.CPER.length} 项 (t^0 保留 ${truncT0}/${fullT0}, t^1/t^2/t^3 保留 ${higherOrder} 项)`,
+    `5e-3 截断摄动: ${truncPertSeries5e3.CPER.length} 项 (t^0 保留 ${truncT0_5e3}/${fullT0}, t^1/t^2/t^3 保留 ${higherOrder} 项)`,
+  );
+  console.log(
+    `5e-4 截断摄动: ${truncPertSeries5e4.CPER.length} 项 (t^0 保留 ${truncT0_5e4}/${fullT0}, t^1/t^2/t^3 保留 ${higherOrder} 项)`,
   );
 }
 

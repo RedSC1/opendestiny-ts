@@ -11,6 +11,7 @@
 
 import { AstroTime, Ecliptic, Vector } from '../astronomy/astronomy';
 import { elpmpp02 } from '../astronomy/elpmpp02';
+import { elpmpp02_5e3 } from '../astronomy/elpmpp02_5e3';
 import { elpmpp02_5e4 } from '../astronomy/elpmpp02_5e4';
 import { deltaTDays } from '../delta-t';
 import { Precision } from './precision';
@@ -83,9 +84,10 @@ export function moonEclipticPosition(jd: number, precision: Precision): MoonSphe
   switch (precision) {
     case Precision.High:
       return elpToApparent(...elpmpp02(tjDays), jd);
-    case Precision.Low:
     case Precision.Medium:
-    default:
       return elpToApparent(...elpmpp02_5e4(tjDays), jd);
+    case Precision.Low:
+    default:
+      return elpToApparent(...elpmpp02_5e3(tjDays), jd);
   }
 }
