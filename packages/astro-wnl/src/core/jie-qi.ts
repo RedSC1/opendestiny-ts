@@ -186,38 +186,224 @@ export function getYearJieQiJd(year: number): number[] {
   return getYearJieQi(year).map((r) => r.jd);
 }
 
+// ============ 内部 slot 定位引擎 ============
+//
+// slot 0 = 1999 年春分, slot 1 = 1999 年清明, ..., slot 24 = 2000 年春分
+// 对应黄经弧度 w = slot * (π/12)
+
+const _dSlot = Math.PI / 12;
+
+/** 获取指定时间的精确当前 slot 编号（jd 落在 [slot, slot+1) 区间内） */
+function _currentSlot(jd: number): number {
+  // 1. 粗放估算：1999 年春分约在 jd=-286.1
+  let slot = Math.floor(((jd + 286.1) / 365.2422) * 24);
+
+  // 2. 闭环校准（误差最多 1-2 个 slot，几乎总是 0-2 次循环）
+  const epsilon = 1.0 / 86400; // 1 秒宽容度
+
+  while (true) {
+    const currentQi = qiAccurate(slot * _dSlot);
+    if (jd < currentQi - epsilon) {
+      slot--;
+    } else {
+      const nextQi = qiAccurate((slot + 1) * _dSlot);
+      if (jd >= nextQi - epsilon) {
+        slot++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  return slot;
+}
+
+/** slot → jieQiNames 索引 */
+function _slotToIndex(slot: number): number {
+  return ((slot % 24) + 5 + 24) % 24;
+}
+
+/** slot → JieQiResult */
+function _slotToResult(slot: number): JieQiResult {
+  const jd = qiAccurate(slot * _dSlot);
+  const idx = _slotToIndex(slot);
+  return {
+    index: idx,
+    name: jieQiNames[idx]!,
+    jd,
+    dateTime: AstroDateTime.fromJ2000(jd),
+  };
+}
+
+/** 向前搜索（含可选过滤） */
+function _findPrev(jd: number, filter?: (index: number) => boolean): JieQiResult {
+  let slot = _currentSlot(jd);
+  if (filter) {
+    while (!filter(_slotToIndex(slot))) {
+      slot--;
+    }
+  }
+  return _slotToResult(slot);
+}
+
+/** 向后搜索（含可选过滤） */
+function _findNext(jd: number, filter?: (index: number) => boolean): JieQiResult {
+  let slot = _currentSlot(jd) + 1;
+  if (filter) {
+    while (!filter(_slotToIndex(slot))) {
+      slot++;
+    }
+  }
+  return _slotToResult(slot);
+}
+
 // ============ 单点查询 API（输入/输出均为 UT） ============
 
-export function getPrevJieQi(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getPrevJieQiFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
-export function getNextJieQi(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getNextJieQiFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
+export function getPrevJieQi(target: AstroDateTime): JieQiResult {
+  return getPrevJieQiFromJd(target.toJ2000());
+}
+export function getPrevJieQiFromJd(jd: number): JieQiResult {
+  return _findPrev(jd);
+}
+export function getNextJieQi(target: AstroDateTime): JieQiResult {
+  return getNextJieQiFromJd(target.toJ2000());
+}
+export function getNextJieQiFromJd(jd: number): JieQiResult {
+  return _findNext(jd);
+}
 
-export function getPrevJie(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getPrevJieFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
-export function getNextJie(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getNextJieFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
+export function getPrevJie(target: AstroDateTime): JieQiResult {
+  return getPrevJieFromJd(target.toJ2000());
+}
+export function getPrevJieFromJd(jd: number): JieQiResult {
+  return _findPrev(jd, isJie);
+}
+export function getNextJie(target: AstroDateTime): JieQiResult {
+  return getNextJieFromJd(target.toJ2000());
+}
+export function getNextJieFromJd(jd: number): JieQiResult {
+  return _findNext(jd, isJie);
+}
 
-export function getPrevQi(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getPrevQiFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
-export function getNextQi(target: AstroDateTime): JieQiResult | null { throw new Error('TODO'); }
-export function getNextQiFromJd(jd: number): JieQiResult | null { throw new Error('TODO'); }
+export function getPrevQi(target: AstroDateTime): JieQiResult {
+  return getPrevQiFromJd(target.toJ2000());
+}
+export function getPrevQiFromJd(jd: number): JieQiResult {
+  return _findPrev(jd, isQi);
+}
+export function getNextQi(target: AstroDateTime): JieQiResult {
+  return getNextQiFromJd(target.toJ2000());
+}
+export function getNextQiFromJd(jd: number): JieQiResult {
+  return _findNext(jd, isQi);
+}
 
 // ============ 距离查询 API ============
 
-export function getJieQiDistance(target: AstroDateTime): JieDistance | null { throw new Error('TODO'); }
-export function getJieQiDistanceFromJd(jd: number): JieDistance | null { throw new Error('TODO'); }
-export function getJieDistance(target: AstroDateTime): JieDistance | null { throw new Error('TODO'); }
-export function getJieDistanceFromJd(jd: number): JieDistance | null { throw new Error('TODO'); }
-export function getQiDistance(target: AstroDateTime): QiDistance | null { throw new Error('TODO'); }
-export function getQiDistanceFromJd(jd: number): QiDistance | null { throw new Error('TODO'); }
-export function getJieQiInfo(target: AstroDateTime): JieQiInfo | null { throw new Error('TODO'); }
+function _getSpan(
+  targetJd: number,
+  prevGetter: (jd: number) => JieQiResult,
+  nextGetter: (jd: number) => JieQiResult,
+): SolarTermSpan {
+  const prev = prevGetter(targetJd);
+  const next = nextGetter(targetJd);
+  const daysSincePrev = targetJd - prev.jd;
+  const daysUntilNext = next.jd - targetJd;
+  const totalDays = next.jd - prev.jd;
+  return {
+    prev,
+    next,
+    daysSincePrev,
+    daysUntilNext,
+    totalDays,
+    get progress() { return daysSincePrev / totalDays; },
+  };
+}
+
+export function getJieQiDistance(target: AstroDateTime): SolarTermSpan {
+  return getJieQiDistanceFromJd(target.toJ2000());
+}
+export function getJieQiDistanceFromJd(jd: number): SolarTermSpan {
+  return _getSpan(jd, getPrevJieQiFromJd, getNextJieQiFromJd);
+}
+
+export function getJieDistance(target: AstroDateTime): JieDistance {
+  return getJieDistanceFromJd(target.toJ2000());
+}
+export function getJieDistanceFromJd(jd: number): JieDistance {
+  const s = _getSpan(jd, getPrevJieFromJd, getNextJieFromJd);
+  return {
+    ...s,
+    prevJie: s.prev,
+    nextJie: s.next,
+    daysSincePrevJie: s.daysSincePrev,
+    daysUntilNextJie: s.daysUntilNext,
+    totalJieDays: s.totalDays,
+    get jieProgress() { return s.daysSincePrev / s.totalDays; },
+  };
+}
+
+export function getQiDistance(target: AstroDateTime): QiDistance {
+  return getQiDistanceFromJd(target.toJ2000());
+}
+export function getQiDistanceFromJd(jd: number): QiDistance {
+  const s = _getSpan(jd, getPrevQiFromJd, getNextQiFromJd);
+  return {
+    ...s,
+    prevQi: s.prev,
+    nextQi: s.next,
+    daysSincePrevQi: s.daysSincePrev,
+    daysUntilNextQi: s.daysUntilNext,
+    totalQiDays: s.totalDays,
+    get qiProgress() { return s.daysSincePrev / s.totalDays; },
+  };
+}
+
+export function getJieQiInfo(target: AstroDateTime): JieQiInfo {
+  return getJieQiInfoFromJd(target.toJ2000());
+}
+
+export function getJieQiInfoFromJd(jd: number): JieQiInfo {
+  const prevJieQi = getPrevJieQiFromJd(jd);
+  const nextJieQi = getNextJieQiFromJd(jd);
+  const prevJie = getPrevJieFromJd(jd);
+  const nextJie = getNextJieFromJd(jd);
+  const prevQi = getPrevQiFromJd(jd);
+  const nextQi = getNextQiFromJd(jd);
+
+  return {
+    prevJieQi,
+    nextJieQi,
+    prevJie,
+    nextJie,
+    prevQi,
+    nextQi,
+    daysSincePrevJieQi: jd - prevJieQi.jd,
+    daysUntilNextJieQi: nextJieQi.jd - jd,
+    daysSincePrevJie: jd - prevJie.jd,
+    daysUntilNextJie: nextJie.jd - jd,
+    daysSincePrevQi: jd - prevQi.jd,
+    daysUntilNextQi: nextQi.jd - jd,
+  };
+}
 
 // ============ Julian Day 便捷接口（UT） ============
 
-export function getPrevJieQiJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
-export function getNextJieQiJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
-export function getPrevJieJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
-export function getNextJieJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
-export function getPrevQiJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
-export function getNextQiJd(target: AstroDateTime): number | null { throw new Error('TODO'); }
+export function getPrevJieQiJd(target: AstroDateTime): number {
+  return getPrevJieQiFromJd(target.toJ2000()).jd;
+}
+export function getNextJieQiJd(target: AstroDateTime): number {
+  return getNextJieQiFromJd(target.toJ2000()).jd;
+}
+export function getPrevJieJd(target: AstroDateTime): number {
+  return getPrevJieFromJd(target.toJ2000()).jd;
+}
+export function getNextJieJd(target: AstroDateTime): number {
+  return getNextJieFromJd(target.toJ2000()).jd;
+}
+export function getPrevQiJd(target: AstroDateTime): number {
+  return getPrevQiFromJd(target.toJ2000()).jd;
+}
+export function getNextQiJd(target: AstroDateTime): number {
+  return getNextQiFromJd(target.toJ2000()).jd;
+}
