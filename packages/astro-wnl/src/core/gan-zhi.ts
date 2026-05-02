@@ -398,21 +398,22 @@ export function hourToZhiIndex(hour: number, minute: number = 0, second: number 
  */
 export function hourGanZhiAt(date: AstroDateTime, ratHourMode?: RatHourMode): GanZhi {
   const mode = ratHourMode ?? RatHourMode.noSplit;
+  const sc = hourToZhiIndex(date.hour, date.minute, date.second);
+  const isLateRat = date.hour >= 23;
 
-  // 确定日柱的天干
-  let dayGz: GanZhi;
-  if (mode === RatHourMode.noSplit && date.hour >= 23) {
+  if (isLateRat) {
     const nextDay = date.add(24 * 3600 * 1000);
-    dayGz = dayGanZhi(nextDay);
-  } else if (mode === RatHourMode.tomorrowGan) {
-    const nextDay = date.add(24 * 3600 * 1000);
-    dayGz = dayGanZhi(nextDay);
-  } else {
-    dayGz = dayGanZhi(date);
+    switch (mode) {
+      case RatHourMode.noSplit:
+        return hourGanZhi(dayGanZhi(nextDay).gan, sc);
+      case RatHourMode.todayGan:
+        return hourGanZhi(dayGanZhi(date).gan, sc);
+      case RatHourMode.tomorrowGan:
+        return hourGanZhi(dayGanZhi(nextDay).gan, sc);
+    }
   }
 
-  const zhiIdx = hourToZhiIndex(date.hour, date.minute, date.second);
-  return hourGanZhi(dayGz.gan, zhiIdx);
+  return hourGanZhi(dayGanZhi(date).gan, sc);
 }
 
 // ============ 八字 ============
@@ -457,32 +458,38 @@ export function calcBaZi(timePack: TimePack): BaZi {
   const vt = timePack.virtualTime;
   const mode = timePack.ratHourMode;
 
-  // 确定日柱用哪个日期（处理 23:00 换日）
-  let adjYear = vt.year;
-  let adjMonth = vt.month;
-  let adjDay = vt.day;
+  const sc = hourToZhiIndex(vt.hour, vt.minute, vt.second);
+  const isLateRat = vt.hour >= 23; // 晚子时（23:00-00:00）
 
-  if (vt.hour >= 23 && mode !== RatHourMode.todayGan) {
-    // noSplit / tomorrowGan: 23:00 起日柱算次日
+  if (isLateRat) {
     const nextDay = vt.add(24 * 3600 * 1000);
-    adjYear = nextDay.year;
-    adjMonth = nextDay.month;
-    adjDay = nextDay.day;
-  } else if (vt.hour < 23 && mode === RatHourMode.tomorrowGan) {
-    const nextDay = vt.add(24 * 3600 * 1000);
-    adjYear = nextDay.year;
-    adjMonth = nextDay.month;
-    adjDay = nextDay.day;
+
+    switch (mode) {
+      case RatHourMode.noSplit: {
+        // 传统早子时：23:00 日柱即滚至次日，时干用次日日干
+        const dayPillar = ganZhiFromDayId(dayId(nextDay.year, nextDay.month, nextDay.day));
+        const timePillar = hourGanZhi(dayPillar.gan, sc);
+        return new BaZi(yearPillar, monthPillar, dayPillar, timePillar);
+      }
+      case RatHourMode.todayGan: {
+        // 区分早晚子时，晚子时日柱仍算今天，时干按今天日干
+        const dayPillar = ganZhiFromDayId(dayId(vt.year, vt.month, vt.day));
+        const timePillar = hourGanZhi(dayPillar.gan, sc);
+        return new BaZi(yearPillar, monthPillar, dayPillar, timePillar);
+      }
+      case RatHourMode.tomorrowGan: {
+        // 区分早晚子时，晚子时日柱仍算今天，但时干按明天日干
+        const dayPillar = ganZhiFromDayId(dayId(vt.year, vt.month, vt.day));
+        const tomorrowPillar = ganZhiFromDayId(dayId(nextDay.year, nextDay.month, nextDay.day));
+        const timePillar = hourGanZhi(tomorrowPillar.gan, sc);
+        return new BaZi(yearPillar, monthPillar, dayPillar, timePillar);
+      }
+    }
   }
 
-  // 日柱：从调整后日期的正午 JD 计算
-  const D = dayId(adjYear, adjMonth, adjDay);
-  const dayPillar = ganZhiFromDayId(D);
-
-  // 时柱
-  const sc = hourToZhiIndex(vt.hour, vt.minute, vt.second);
+  // 非晚子时：三种流派一致
+  const dayPillar = ganZhiFromDayId(dayId(vt.year, vt.month, vt.day));
   const timePillar = hourGanZhi(dayPillar.gan, sc);
-
   return new BaZi(yearPillar, monthPillar, dayPillar, timePillar);
 }
 
