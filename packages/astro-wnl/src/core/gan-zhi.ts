@@ -8,6 +8,9 @@
 import AstroDateTime from '../utils/astro_date_time';
 import { TimePack } from '../models/time-pack';
 import { RatHourMode } from '../enums/rat-hour-mode';
+import { sunEclipticLongitude } from '../ephemeris/adapters/sun';
+import { Precision } from '../ephemeris/adapters/precision';
+import { deltaTDays } from '../ephemeris/delta-t';
 
 // ============ 天干 ============
 
@@ -250,16 +253,50 @@ export class BaZi {
   }
 }
 
+// ============ 内部辅助 ============
+
+/** 公历日期 → 正午 J2000 儒略日（取整），作为"日序号" */
+function dayId(year: number, month: number, day: number): number {
+  return Math.floor(new AstroDateTime(year, month, day, 12, 0, 0).toJ2000());
+}
+
+/** 日序号 → 干支 */
+function ganZhiFromDayId(D: number): GanZhi {
+  const offset = D - 6;
+  return new GanZhi(
+    (((offset % 10) + 10) % 10) as TianGan,
+    (((offset % 12) + 12) % 12) as DiZhi,
+  );
+}
+
+/**
+ * 判断公历日期是否在立春之前（即八字年柱取上一年）
+ *
+ * @param month 月份（1-12）
+ * @param lonDeg 太阳视黄经（度）
+ */
+function isBeforeLiChun(month: number, lonDeg: number): boolean {
+  // 立春发生在太阳黄经 315°，约公历 2 月 3-5 日
+  // 正月一定在立春前；二月若黄经 < 315° 则尚未交节
+  return month === 1 || (month === 2 && lonDeg < 315);
+}
+
 // ============ 年干支 ============
 
 /**
  * 获取指定公历年份的干支
- * 注意：年干支以立春为界，不是以春节为界。
+ *
+ * 注意：此函数返回的是"大致"年干支（按公历年份），
+ * 精确的年干支以立春为界，需通过 calcBaZi 获取。
  */
-export function yearGanZhi(year: number): GanZhi { throw new Error('TODO'); }
+export function yearGanZhi(year: number): GanZhi {
+  return GanZhi.fromIndex(((year - 4) % 60 + 60) % 60);
+}
 
 /** 获取指定公历年份的生肖 */
-export function yearShengXiao(year: number): string { throw new Error('TODO'); }
+export function yearShengXiao(year: number): string {
+  return diZhiToShengXiao(yearGanZhi(year).zhi);
+}
 
 // ============ 月干支 ============
 
@@ -268,13 +305,32 @@ export function yearShengXiao(year: number): string { throw new Error('TODO'); }
  * @param yearGan 年天干
  * @param monthIndex 月地支索引（0=寅月/正月, 1=卯月, ...）
  */
-export function monthGanZhi(yearGan: TianGan, monthIndex: number): GanZhi { throw new Error('TODO'); }
+export function monthGanZhi(yearGan: TianGan, monthIndex: number): GanZhi {
+  const startGanIdx = ((yearGan % 5) * 2 + 2) % 10;
+  return new GanZhi(
+    ((startGanIdx + monthIndex) % 10) as TianGan,
+    ((monthIndex + 2) % 12) as DiZhi,
+  );
+}
 
 /**
- * 根据公历日期获取月干支
- * 注意：月干支以节气为界（节换月）。
+ * 根据公历日期获取月干支（基于太阳黄经的节气月）
+ *
+ * 将日期转换为 UT J2000，根据太阳视黄经确定所属的节气月，
+ * 再以该日期的年柱推定月干。
  */
-export function monthGanZhiAt(date: AstroDateTime): GanZhi { throw new Error('TODO'); }
+export function monthGanZhiAt(date: AstroDateTime): GanZhi {
+  const jd = date.toJ2000();
+  const ttJd = jd + deltaTDays(jd);
+  const lonDeg = sunEclipticLongitude(ttJd, Precision.Low);
+  const monthIdx = monthIndexFromLongitude(lonDeg);
+
+  // 年柱：用于推定月干
+  const baZiYear = isBeforeLiChun(date.month, lonDeg)
+    ? date.year - 1
+    : date.year;
+  return monthGanZhi(yearGanZhi(baZiYear).gan, monthIdx);
+}
 
 // ============ 日干支 ============
 
@@ -282,10 +338,16 @@ export function monthGanZhiAt(date: AstroDateTime): GanZhi { throw new Error('TO
  * 获取指定公历日期的日干支（按历法日期，不处理 23:00 换日）。
  * 若需八字规则（23:00 换日），请使用 calcBaZi。
  */
-export function dayGanZhi(date: AstroDateTime): GanZhi { throw new Error('TODO'); }
+export function dayGanZhi(date: AstroDateTime): GanZhi {
+  return ganZhiFromDayId(dayId(date.year, date.month, date.day));
+}
 
 /** 获取指定 J2000 相对儒略日的日干支 */
-export function dayGanZhiFromJd(jd: number): GanZhi { throw new Error('TODO'); }
+export function dayGanZhiFromJd(jd: number): GanZhi {
+  // +0.5 使得正午位于整数，floor 得到日序号
+  const D = Math.floor(jd + 0.5);
+  return ganZhiFromDayId(D);
+}
 
 // ============ 时干支 ============
 
@@ -294,7 +356,13 @@ export function dayGanZhiFromJd(jd: number): GanZhi { throw new Error('TODO'); }
  * @param dayGan 日天干
  * @param hourIndex 时辰索引（0=子时 23-1, 1=丑时 1-3, ...）
  */
-export function hourGanZhi(dayGan: TianGan, hourIndex: number): GanZhi { throw new Error('TODO'); }
+export function hourGanZhi(dayGan: TianGan, hourIndex: number): GanZhi {
+  const startGanIdx = (dayGan % 5) * 2;
+  return new GanZhi(
+    ((startGanIdx + hourIndex) % 10) as TianGan,
+    (hourIndex % 12) as DiZhi,
+  );
+}
 
 /**
  * 将时分秒转换为时辰索引（整数运算，避免浮点边界误差）
@@ -321,36 +389,133 @@ export function hourToZhiIndex(hour: number, minute: number = 0, second: number 
 
 /**
  * 根据公历日期时间获取时干支（AstroDateTime 精确版）
+ *
  * @param date 日期时间（真太阳时）
  * @param ratHourMode 早晚子时处理模式（默认 noSplit）
+ *   - noSplit: 23:00 起日柱算次日
+ *   - todayGan: 始终用当日日干
+ *   - tomorrowGan: 始终用次日日干
  */
-export function hourGanZhiAt(date: AstroDateTime, ratHourMode?: RatHourMode): GanZhi { throw new Error('TODO'); }
+export function hourGanZhiAt(date: AstroDateTime, ratHourMode?: RatHourMode): GanZhi {
+  const mode = ratHourMode ?? RatHourMode.noSplit;
+
+  // 确定日柱的天干
+  let dayGz: GanZhi;
+  if (mode === RatHourMode.noSplit && date.hour >= 23) {
+    const nextDay = date.add(24 * 3600 * 1000);
+    dayGz = dayGanZhi(nextDay);
+  } else if (mode === RatHourMode.tomorrowGan) {
+    const nextDay = date.add(24 * 3600 * 1000);
+    dayGz = dayGanZhi(nextDay);
+  } else {
+    dayGz = dayGanZhi(date);
+  }
+
+  const zhiIdx = hourToZhiIndex(date.hour, date.minute, date.second);
+  return hourGanZhi(dayGz.gan, zhiIdx);
+}
 
 // ============ 八字 ============
 
 /**
  * 计算八字（四柱）—— TimePack 精确版
  *
- * 年柱/月柱由 TimePack.utcTime 对应的节气决定。
+ * 年柱/月柱由 TimePack.utcTime 对应的节气决定（基于太阳视黄经）。
  * 日柱/时柱由 TimePack.virtualTime 决定，并遵循 TimePack.ratHourMode 的早晚子时规则。
  *
  * @param timePack 时间封装包（含 UTC、真太阳时、早晚子时配置）
  */
-export function calcBaZi(timePack: TimePack): BaZi { throw new Error('TODO'); }
+/**
+ * 根据太阳视黄经计算节气月索引（0=寅月, 1=卯月, ..., 11=丑月）
+ *
+ * 八字月份以节（jie）为界，12 个节把黄道均分为 30° 一段，
+ * 起点为立春 315°。
+ */
+function monthIndexFromLongitude(lonDeg: number): number {
+  return Math.floor(((lonDeg - 315 + 360) % 360) / 30);
+}
+
+export function calcBaZi(timePack: TimePack): BaZi {
+  // ---- 年柱 + 月柱：基于 UTC 时间的太阳视黄经 ----
+  const utJd = timePack.utcTime.toJ2000();
+  const ttJd = utJd + deltaTDays(utJd);
+  const lonDeg = sunEclipticLongitude(ttJd, Precision.Low);
+
+  // 年柱：公历年份 ± 立春修正
+  // 八字年柱以立春（太阳黄经 315°）为界，与公历 1 月 1 日不同步
+  const utYear = timePack.utcTime.year;
+  const baZiYear = isBeforeLiChun(timePack.utcTime.month, lonDeg)
+    ? utYear - 1
+    : utYear;
+  const yearPillar = yearGanZhi(baZiYear);
+
+  // 月柱：由太阳黄经确定节气月，再以年干推定月干
+  const monthIdx = monthIndexFromLongitude(lonDeg);
+  const monthPillar = monthGanZhi(yearPillar.gan, monthIdx);
+
+  // ---- 日柱 + 时柱：基于 virtualTime（整数运算，避免浮点边界） ----
+  const vt = timePack.virtualTime;
+  const mode = timePack.ratHourMode;
+
+  // 确定日柱用哪个日期（处理 23:00 换日）
+  let adjYear = vt.year;
+  let adjMonth = vt.month;
+  let adjDay = vt.day;
+
+  if (vt.hour >= 23 && mode !== RatHourMode.todayGan) {
+    // noSplit / tomorrowGan: 23:00 起日柱算次日
+    const nextDay = vt.add(24 * 3600 * 1000);
+    adjYear = nextDay.year;
+    adjMonth = nextDay.month;
+    adjDay = nextDay.day;
+  } else if (vt.hour < 23 && mode === RatHourMode.tomorrowGan) {
+    const nextDay = vt.add(24 * 3600 * 1000);
+    adjYear = nextDay.year;
+    adjMonth = nextDay.month;
+    adjDay = nextDay.day;
+  }
+
+  // 日柱：从调整后日期的正午 JD 计算
+  const D = dayId(adjYear, adjMonth, adjDay);
+  const dayPillar = ganZhiFromDayId(D);
+
+  // 时柱
+  const sc = hourToZhiIndex(vt.hour, vt.minute, vt.second);
+  const timePillar = hourGanZhi(dayPillar.gan, sc);
+
+  return new BaZi(yearPillar, monthPillar, dayPillar, timePillar);
+}
 
 // ============ 便捷查询 ============
 
 /**
  * 获取指定年份范围内的所有年干支信息
  */
-export function getYearRangeGanZhi(startYear: number, endYear: number): { year: number; ganZhi: GanZhi; shengXiao: string }[] { throw new Error('TODO'); }
+export function getYearRangeGanZhi(
+  startYear: number,
+  endYear: number,
+): { year: number; ganZhi: GanZhi; shengXiao: string }[] {
+  const count = endYear - startYear + 1;
+  if (count <= 0) return [];
+  const result: { year: number; ganZhi: GanZhi; shengXiao: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const year = startYear + i;
+    const gz = yearGanZhi(year);
+    result.push({ year, ganZhi: gz, shengXiao: diZhiToShengXiao(gz.zhi) });
+  }
+  return result;
+}
 
 /**
- * 获取指定年天干的全年 12 个月干支
+ * 获取指定年天干的全年 12 个月干支（寅月～丑月）
  */
-export function getYearMonthGanZhi(yearGan: TianGan): GanZhi[] { throw new Error('TODO'); }
+export function getYearMonthGanZhi(yearGan: TianGan): GanZhi[] {
+  return Array.from({ length: 12 }, (_, i) => monthGanZhi(yearGan, i));
+}
 
 /**
- * 获取指定日天干的全天 12 个时辰干支
+ * 获取指定日天干的全天 12 个时辰干支（子时～亥时）
  */
-export function getDayHourGanZhi(dayGan: TianGan): GanZhi[] { throw new Error('TODO'); }
+export function getDayHourGanZhi(dayGan: TianGan): GanZhi[] {
+  return Array.from({ length: 12 }, (_, i) => hourGanZhi(dayGan, i));
+}
