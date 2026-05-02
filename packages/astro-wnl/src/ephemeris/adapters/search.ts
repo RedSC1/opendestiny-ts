@@ -245,6 +245,19 @@ export function searchLunarPhaseSecantWithFallback(
 ): number {
   // 用 Low 精度做初值修正（快）
   const f0 = _lunarPhaseOffset(jdApprox, targetPhase, Precision.Low);
+
+  // 当 jdApprox 位于两朔日中间（|f0|≈180°）时，
+  // 初值修正可能因 360° 周期歧义跳到错误的朔日。
+  // 此时直接 fallback 到二分搜索，在 ±20 天内搜索。
+  if (Math.abs(f0) > 120) {
+    const fallback = searchLunarPhase(targetPhase, jdApprox - 20, 40, precision);
+    if (fallback !== null) return fallback;
+    throw new Error(
+      `searchLunarPhaseSecantWithFallback: binary fallback failed ` +
+      `for jdApprox=${jdApprox.toFixed(2)}, f0=${f0.toFixed(2)}°`,
+    );
+  }
+
   const jdInit = jdApprox - f0 / 12.19;
 
   // 割线法用指定精度精修

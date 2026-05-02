@@ -2,17 +2,20 @@
  * 分级月球视位置计算
  *
  * 所有精度统一返回历元真黄道视坐标：
- * - Low/Medium: ELPMPP02 5e-4 截断版（7106 项）
- * - High:       ELPMPP02 完整版（24896 项）
+ * - VeryLow:     布朗月球理论（~116 项），速度最快，误差 10"~1′
+ * - Low:         SXWNL XL1 简化版（1175 项）
+ * - Medium:      ELPMPP02 5e-4 截断版
+ * - High:        ELPMPP02 完整版（24896 项）
  *
  * 接口统一使用 J2000 相对 UT 儒略日（number）流转，
  * 内部调用星历时临时转为 TT。
  */
 
 import { AstroTime, Ecliptic, Vector } from '../astronomy/astronomy';
+import { brownMoonCoords } from '../astronomy/brown_moon';
 import { elpmpp02 } from '../astronomy/elpmpp02';
-import { elpmpp02_5e3 } from '../astronomy/elpmpp02_5e3';
 import { elpmpp02_5e4 } from '../astronomy/elpmpp02_5e4';
+import { xl1MoonCoords } from '../astronomy/xl1_moon';
 import { deltaTDays } from '../delta-t';
 import { Precision } from './precision';
 
@@ -86,8 +89,14 @@ export function moonEclipticPosition(jd: number, precision: Precision): MoonSphe
       return elpToApparent(...elpmpp02(tjDays), jd);
     case Precision.Medium:
       return elpToApparent(...elpmpp02_5e4(tjDays), jd);
-    case Precision.Low:
-    default:
-      return elpToApparent(...elpmpp02_5e3(tjDays), jd);
+    case Precision.Low: {
+      const t = tjDays / 36525;
+      return elpToApparent(...xl1MoonCoords(t), jd);
+    }
+    case Precision.VeryLow:
+    default: {
+      const { lon, lat, dist } = brownMoonCoords(tjDays);
+      return { elon: lon * (180 / Math.PI), elat: lat * (180 / Math.PI), dist };
+    }
   }
 }

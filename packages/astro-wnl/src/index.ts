@@ -5,6 +5,7 @@
 
 export * from './core';
 export * from './ephemeris';
+export * from './historical';
 export * from './utils';
 
 // Default export

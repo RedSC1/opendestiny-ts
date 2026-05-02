@@ -49,6 +49,13 @@ const VSOP_ROT = {
   m22: 0.917482137087,
 };
 
+/** 极速截断（~10 项），用于历史修正初值 */
+const VERY_LOW_TERMS = {
+  L: [8, 1, 0, 0, 0, 0] as number[],
+  B: [0, 1, 0, 0, 0, 0] as number[],
+  R: [4, 1, 0, 0, 0, 0] as number[],
+};
+
 /** 原版 astronomy-engine 地球项数（~49 项） */
 const LOW_TERMS = {
   L: [28, 2, 1, 0, 0, 0] as number[],
@@ -210,6 +217,8 @@ function vsopDerivative(
 /** 获取指定精度的截断参数 */
 function _getTerms(precision: Precision): { L: number[]; B: number[]; R: number[] } {
   switch (precision) {
+    case Precision.VeryLow:
+      return VERY_LOW_TERMS;
     case Precision.Low:
       return LOW_TERMS;
     case Precision.Medium:
@@ -257,6 +266,11 @@ export function sunEclipticLongitudeWithDerivative(
  */
 export function sunEclipticLongitude(jd: number, precision: Precision): number {
   switch (precision) {
+    case Precision.VeryLow:
+      return equJ2000ToApparent(
+        calcSunGeometricEquJ2000(jd, VERY_LOW_TERMS.L, VERY_LOW_TERMS.B, VERY_LOW_TERMS.R),
+        jd,
+      );
     case Precision.Low:
       return equJ2000ToApparent(
         calcSunGeometricEquJ2000(jd, LOW_TERMS.L, LOW_TERMS.B, LOW_TERMS.R),
