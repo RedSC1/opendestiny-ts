@@ -16,5 +16,8 @@ export * from './lunar-year';
 // ===== 干支 =====
 export * from './gan-zhi';
 
+// ===== 农历日期 =====
+export * from './lunar-date';
+
 // ===== 日历聚合 =====
 export * from './calendar';

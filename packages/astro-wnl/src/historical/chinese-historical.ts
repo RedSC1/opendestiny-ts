@@ -60,9 +60,12 @@ function getQiCorrectionIndex(jdApprox: number): { idx: number; isAncient: boole
  * - 近代（1645 ~ 1960）：VeryLow 定气搜索 + 校正表
  * - 超出修正表范围：直接返回 VeryLow 定气搜索结果
  *
+ * 时区说明：修正表数据从 sxwnl 导出，sxwnl 内部使用北京时间（UTC+8）。
+ * 因此返回值基于北京时间标尺（已含 +8/24），并非 UT。
+ *
  * @param targetLon 目标黄经（度），如 0=春分, 90=夏至, 180=秋分, 270=冬至
- * @param jdApprox  近似时刻（J2000 相对 UT），允许偏差数天
- * @returns 精确时刻（J2000 相对 UT 儒略日）
+ * @param jdApprox  近似时刻（J2000 相对，北京时间标尺），允许偏差数天
+ * @returns 精确时刻（J2000 相对，北京时间标尺）
  */
 export function getChineseHistoricalSolarTerm(
   targetLon: number,
@@ -72,10 +75,24 @@ export function getChineseHistoricalSolarTerm(
 
   if (isAncient) {
     // 远古：平气拟合 + 小校正表
-    const approx = QI_ANCIENT_FIRST_JD + idx * QI_ANCIENT_PERIOD;
-    const packed = unpack3Bit(QI_ANCIENT_DATA, idx);
-    const correction = QI_ANCIENT_MAP[packed]!;
-    return approx + correction;
+    // 修正表按时间顺序存储，index 0 对应冬至（270°），每递增 1 前进 15°。
+    // jdApprox 只决定大致时间位置，需根据 targetLon 修正 index 偏移，
+    // 否则同一 jdApprox 对所有 targetLon 返回相同结果。
+    const idxMod24 = ((idx % 24) + 24) % 24;
+    const targetMod24 = Math.round(((targetLon - 270 + 360) % 360) / 15) % 24;
+    let offset = targetMod24 - idxMod24;
+    if (offset > 12) offset -= 24;
+    if (offset < -12) offset += 24;
+    const adjustedIdx = idx + offset;
+
+    if (adjustedIdx >= 0 && adjustedIdx < QI_ANCIENT_CORRECTION_COUNT) {
+      const approx = QI_ANCIENT_FIRST_JD + adjustedIdx * QI_ANCIENT_PERIOD;
+      const packed = unpack3Bit(QI_ANCIENT_DATA, adjustedIdx);
+      const correction = QI_ANCIENT_MAP[packed]!;
+      return approx + correction;
+    }
+    // adjustedIdx 越界则回退到定气搜索
+    return searchSolarTermNewtonWithEstimate(targetLon, jdApprox, Precision.VeryLow);
   }
 
   if (idx >= 0) {
@@ -111,8 +128,11 @@ function getSuoCorrectionIndex(jdApprox: number): number {
  * 3. 查历史修正表，应用 ±0/1/2 天修正
  * 4. 超出修正表范围时，直接返回 Low 搜索结果（无校正）
  *
- * @param jd 任意时刻（J2000 相对 UT）
- * @returns 该时刻所在农历月份开始的确切朔日时刻（J2000 相对 UT 儒略日）
+ * 时区说明：修正表数据从 sxwnl 导出，sxwnl 内部使用北京时间（UTC+8）。
+ * 因此返回值基于北京时间标尺（已含 +8/24），并非 UT。
+ *
+ * @param jd 任意时刻（J2000 相对，北京时间标尺）
+ * @returns 该时刻所在农历月份开始的确切朔日时刻（J2000 相对，北京时间标尺）
  */
 export function getChineseHistoricalMonth(jd: number): number {
   // 阶段 1：用线性公式估算朔日

@@ -324,6 +324,29 @@ export interface EarthTiltInfo {
     tobl: number;
 }
 export declare function e_tilt(time: AstroTime): EarthTiltInfo;
+
+/** Nutation angles returned by iau2000b */
+export interface NutationInfo {
+    /** Nutation in longitude, in degrees */
+    dpsi: number;
+    /** Nutation in obliquity, in degrees */
+    deps: number;
+}
+
+/**
+ * IAU 2000B nutation model.
+ * @param time An object with a `tt` property (TT days since J2000).
+ * @returns Nutation angles in degrees.
+ */
+export declare function iau2000b(time: { tt: number }): NutationInfo;
+
+/**
+ * Mean obliquity of the ecliptic (P03 model).
+ * @param time An object with a `tt` property (TT days since J2000).
+ * @returns Mean obliquity in degrees.
+ */
+export declare function mean_obliq(time: { tt: number }): number;
+
 export declare let CalcMoonCount: number;
 /**
  * @brief Lunar libration angles, returned by {@link Libration}.

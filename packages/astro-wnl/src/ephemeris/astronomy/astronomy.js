@@ -561,7 +561,7 @@ export function MakeTime(date) {
     }
     return new AstroTime(date);
 }
-function iau2000b(time) {
+export function iau2000b(time) {
     function mod(x) {
         return (x % ASEC360) * ASEC2RAD;
     }
@@ -588,7 +588,7 @@ function iau2000b(time) {
         deps: +0.000388 + (de * 1.0e-7)
     };
 }
-function mean_obliq(time) {
+export function mean_obliq(time) {
     var t = time.tt / 36525;
     var asec = (((((-0.0000000434 * t
         - 0.000000576) * t

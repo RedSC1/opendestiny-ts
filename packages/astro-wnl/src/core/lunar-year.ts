@@ -50,6 +50,9 @@ const _TERM_INTERVAL = 15.2184;
 
 /** 农历年排月结果 */
 export interface LunarYear {
+  /** 该年对应的公历年份 */
+  readonly year: number;
+
   /** 25 个节气时刻（当地时，J2000 相对儒略日） */
   readonly solarTerms: readonly number[];
 
@@ -64,9 +67,6 @@ export interface LunarYear {
 
   /** 闰月位置（0-based），-1 表示无闰月 */
   readonly leapMonthIndex: number;
-
-  /** 年干支序号（0-59，甲子=0） */
-  readonly yearGanZhi: number;
 
   /** 该年起始冬至（当地时） */
   readonly winterSolstice: number;
@@ -87,13 +87,6 @@ function _toLocal(utJd: number, longitude: number): number {
 /** 当地平时 → 当地日期编号（与 sxwnl JS 原版的 int2(x + 0.5) 等效） */
 function _toLocalDay(localJd: number): number {
   return _int2(localJd + 0.5);
-}
-
-/** 年干支序号（0-59），以冬至所在公历年估算 */
-function _yearGanZhi(winterSolsticeLocal: number): number {
-  const dt = AstroDateTime.fromJ2000(winterSolsticeLocal);
-  const year = dt.year;
-  return ((year - 1984) % 60 + 60) % 60;
 }
 
 // ============ 核心函数（移植自 sxwnl calcY） ============
@@ -129,6 +122,10 @@ export function arrangeLunarYear(jd: number, longitude: number = 120): LunarYear
     winterSolsticeUT = searchSolarTermNewtonWithEstimate(270, w, Precision.High);
     winterSolstice = _toLocal(winterSolsticeUT, longitude);
   }
+
+  // 该年对应的公历年份（节气年大部分落在哪个公历年）
+  const ws = AstroDateTime.fromJ2000(winterSolstice);
+  const year = ws.month <= 6 ? ws.year : ws.year + 1;
 
   // ---- 步骤 2：计算 25 个节气（从冬至开始） ----
   // 与 sxwnl 一致：w + 15.2184 * i 估算，然后精确搜索（UT），结果转当地时
@@ -203,16 +200,13 @@ export function arrangeLunarYear(jd: number, longitude: number = 120): LunarYear
     monthNames[i] = name;
   }
 
-  // ---- 步骤 9：年干支 ----
-  const yearGanZhi = _yearGanZhi(winterSolstice);
-
   return {
+    year,
     solarTerms,
     newMoons,
     monthLengths,
     monthNames,
     leapMonthIndex,
-    yearGanZhi,
     winterSolstice,
   };
 }
@@ -266,7 +260,6 @@ export function getLunarDayAt(
   jd: number,
   longitude: number = 120,
 ): {
-  lunarYear: number;
   monthName: string;
   isLeap: boolean;
   day: number;
@@ -281,7 +274,6 @@ export function getLunarDayAt(
 
     if (localDay >= start && localDay < end) {
       return {
-        lunarYear: year.yearGanZhi,
         monthName: year.monthNames[i]!,
         isLeap: i === year.leapMonthIndex,
         day: localDay - start + 1,
@@ -294,33 +286,17 @@ export function getLunarDayAt(
 }
 
 /**
- * 获取指定农历年的闰月。
+ * 获取指定公历年的闰月。
  *
- * @param lunarYear 农历年干支序号（0-59）
+ * @param year 公历年份
  * @param longitude 经度（度），默认 120
  * @returns 闰月名称（如 "闰四"），无闰月返回 null
  */
 export function getLeapMonth(
-  lunarYear: number,
+  year: number,
   longitude: number = 120,
 ): string | null {
-  const approxYear = lunarYear + 1984;
-  const jd = new AstroDateTime(approxYear, 6, 1).toJ2000();
-  const year = arrangeLunarYear(jd, longitude);
-
-  if (year.yearGanZhi !== lunarYear) {
-    const jd2 = new AstroDateTime(approxYear + 1, 6, 1).toJ2000();
-    const year2 = arrangeLunarYear(jd2, longitude);
-    if (year2.yearGanZhi === lunarYear && year2.leapMonthIndex >= 0) {
-      return year2.monthNames[year2.leapMonthIndex]!;
-    }
-    const jd3 = new AstroDateTime(approxYear - 1, 6, 1).toJ2000();
-    const year3 = arrangeLunarYear(jd3, longitude);
-    if (year3.yearGanZhi === lunarYear && year3.leapMonthIndex >= 0) {
-      return year3.monthNames[year3.leapMonthIndex]!;
-    }
-    return null;
-  }
-
-  return year.leapMonthIndex >= 0 ? year.monthNames[year.leapMonthIndex]! : null;
+  const jd = new AstroDateTime(year, 6, 1).toJ2000();
+  const ly = arrangeLunarYear(jd, longitude);
+  return ly.leapMonthIndex >= 0 ? ly.monthNames[ly.leapMonthIndex]! : null;
 }
